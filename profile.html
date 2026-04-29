@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dog Profile — Paws & Found</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+  <!-- ===== NAVBAR ===== -->
+  <nav class="navbar">
+    <a href="index.html" class="logo">🐾 Paws &amp; Found</a>
+    <div class="nav-links">
+      <a href="index.html" class="nav-link">Search</a>
+      <a href="favorites.html" class="nav-link">Favorites <span class="fav-count" id="fav-count">0</span></a>
+      <button class="btn-auth" id="auth-btn">Sign In</button>
+    </div>
+  </nav>
+
+  <!-- Back button -->
+  <div class="back-bar">
+    <a href="index.html" class="back-link">← Back to Search</a>
+  </div>
+
+  <!-- ===== DOG PROFILE ===== -->
+  <!-- Populated by JS using GET /v2/animals/{id} + GET /api/breed/{breed}/images/random -->
+  <main class="profile-main" id="profile-container">
+
+    <div class="profile-layout">
+
+      <!-- LEFT: Photo gallery -->
+      <aside class="profile-gallery">
+        <div class="main-photo-wrap">
+          <!-- Main photo: from Petfinder API or fallback from dog.ceo -->
+          <img id="main-photo" src="" alt="Dog photo" class="main-photo" />
+          <div class="photo-placeholder" id="photo-placeholder">Loading photo...</div>
+        </div>
+
+        <!-- Thumbnail strip — additional photos from Petfinder API -->
+        <div class="thumbs-row" id="thumbs-row">
+          <!-- JS populates thumbnails here -->
+          <div id="thumbs-container"></div>
+        </div>
+
+        <p class="photo-credit" id="photo-credit" style="display:none;">
+          📷 Placeholder photo via <a href="https://dog.ceo" target="_blank">dog.ceo</a>
+        </p>
+      </aside>
+
+      <!-- RIGHT: Details -->
+      <section class="profile-details">
+
+        <!-- Name + basic info — from GET /v2/animals/{id} -->
+        <div class="profile-header">
+          <h1 class="dog-name" id="dog-name">Loading...</h1>
+          <p class="dog-meta" id="dog-meta"></p>
+        </div>
+
+        <!-- Shelter location -->
+        <div class="profile-section">
+          <h3>Location</h3>
+          <p id="dog-location" class="detail-text">—</p>
+        </div>
+
+        <!-- Personality traits — tags from Petfinder API -->
+        <div class="profile-section">
+          <h3>Personality</h3>
+          <div class="traits-row" id="traits-container">
+            <!-- JS populates trait pills here -->
+            <div id="traits-placeholder" class="placeholder-line w-80"></div>
+          </div>
+        </div>
+
+        <!-- Description -->
+        <div class="profile-section">
+          <h3>About</h3>
+          <p id="dog-description" class="detail-text">—</p>
+        </div>
+
+        <!-- Health info -->
+        <div class="profile-section health-row" id="health-row">
+          <span class="health-badge" id="badge-vaccinated" style="display:none;">✓ Vaccinated</span>
+          <span class="health-badge" id="badge-neutered" style="display:none;">✓ Spayed / Neutered</span>
+          <span class="health-badge" id="badge-housetrained" style="display:none;">✓ House Trained</span>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="profile-actions">
+          <!-- Contact shelter — links to Petfinder listing URL -->
+          <a href="#" id="contact-shelter-btn" target="_blank" class="btn-primary">
+            Contact Shelter →
+          </a>
+
+          <!-- Save to Favorites — writes to Firebase Realtime Database -->
+          <button class="btn-favorite" id="favorite-btn" data-dog-id="">
+            ♡ Save to Favorites
+          </button>
+        </div>
+
+        <!-- Shelter info — from GET /v2/animals/{id} -->
+        <div class="shelter-card" id="shelter-card">
+          <h4>Shelter</h4>
+          <p id="shelter-name">—</p>
+          <p id="shelter-phone">—</p>
+          <p id="shelter-email">—</p>
+        </div>
+
+      </section>
+    </div>
+    <!-- END .profile-layout -->
+
+  </main>
+  <!-- END #profile-container -->
+
+  <!-- ===== FOOTER ===== -->
+  <footer class="site-footer">
+    <p>Data sourced from <a href="https://www.petfinder.com/developers/" target="_blank">Petfinder API</a> &amp; <a href="https://dog.ceo/dog-api/" target="_blank">Dog CEO API</a></p>
+    <p class="footer-sub">Paws &amp; Found · Built with ♡</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
