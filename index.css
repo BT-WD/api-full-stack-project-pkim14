@@ -418,6 +418,30 @@ a { color: inherit; text-decoration: none; }
 .btn-favorite:hover { background: var(--tan); }
 .btn-favorite.saved { background: #fdecea; border-color: #e05a5a; color: #e05a5a; }
 
+/* ── Favorites Page ────────────────────────────────────── */
+.page-title-row {
+  margin-bottom: 2rem;
+}
+.page-title {
+  font-family: var(--font-head);
+  font-size: 2rem;
+  color: var(--dark);
+  margin-bottom: 0.4rem;
+}
+.page-sub {
+  font-size: 0.95rem;
+  color: var(--brown);
+  opacity: 0.8;
+}
+
+.auth-wall {
+  text-align: center;
+  padding: 4rem 1.5rem;
+}
+.auth-wall-icon { font-size: 3rem; margin-bottom: 1rem; }
+.auth-wall h2 { font-family: var(--font-head); font-size: 1.8rem; margin-bottom: 0.5rem; }
+.auth-wall p  { color: var(--brown); opacity: 0.8; margin-bottom: 1.5rem; }
+
 /* ── Footer ────────────────────────────────────────────── */
 .site-footer {
   text-align: center;
