@@ -13,7 +13,9 @@ const DOGCEO_BASE = "https://dog.ceo/api";
 const NINJAS_BASE = "https://api.api-ninjas.com/v1/dogs";
 
 // ── STATE ─────────────────────────────────────────────
-let favorites = JSON.parse(localStorage.getItem("paws_favorites") || "[]");
+let favorites      = JSON.parse(localStorage.getItem("paws_favorites")       || "[]");
+let recentlyViewed = JSON.parse(localStorage.getItem("paws_recently_viewed") || "[]");
+let reactions      = JSON.parse(localStorage.getItem("paws_reactions")       || "{}");
 let allBreeds = {};
 
 // ── INIT ──────────────────────────────────────────────
@@ -34,6 +36,7 @@ document.addEventListener("DOMContentLoaded", () => {
 // ═══════════════════════════════════════════════════════
 async function initSearchPage() {
   console.log("🔍 Initializing search page...");
+  renderRecentlyViewed();
   await loadBreedDropdown();
   document.getElementById("search-btn").addEventListener("click", handleSearch);
   document.getElementById("apply-filters-btn").addEventListener("click", handleSearch);
@@ -136,9 +139,10 @@ function renderDogCards(photos, breedPath, breedInfo) {
   }
 
   photos.forEach((imgUrl, i) => {
-    const isSaved = favorites.some(f => f.imgUrl === imgUrl);
-    const card    = document.createElement("div");
-    card.className = "dog-card";
+    const isSaved   = favorites.some(f => f.imgUrl === imgUrl);
+    const reaction  = reactions[imgUrl] || null;
+    const card      = document.createElement("div");
+    card.className  = "dog-card";
 
     card.innerHTML = `
       <div class="card-img-wrap">
@@ -157,6 +161,10 @@ function renderDogCards(photos, breedPath, breedInfo) {
           ${breedInfo ? `${breedInfo.min_weight_male}–${breedInfo.max_weight_male} lbs &middot; ${breedInfo.min_life_expectancy}–${breedInfo.max_life_expectancy} yrs` : ""}
         </p>
       </div>
+      <div class="reaction-bar">
+        <button class="btn-react btn-like ${reaction === "like" ? "active" : ""}" title="I like this dog">👍</button>
+        <button class="btn-react btn-dislike ${reaction === "dislike" ? "active" : ""}" title="Not for me">👎</button>
+      </div>
       <div class="card-footer">
         <span>🐾 Adoptable</span>
         <a href="profile.html?breed=${encodeURIComponent(breedPath)}&img=${encodeURIComponent(imgUrl)}" class="card-view-btn">View →</a>
@@ -170,6 +178,20 @@ function renderDogCards(photos, breedPath, breedInfo) {
       e.currentTarget.textContent = nowSaved ? "♥" : "♡";
       e.currentTarget.classList.toggle("saved", nowSaved);
       console.log(`${nowSaved ? "💾 Saved" : "🗑️ Removed"} favorite:`, imgUrl);
+    });
+
+    card.querySelector(".btn-like").addEventListener("click", (e) => {
+      e.stopPropagation();
+      const result = toggleReaction(imgUrl, "like");
+      card.querySelector(".btn-like").classList.toggle("active", result === "like");
+      card.querySelector(".btn-dislike").classList.remove("active");
+    });
+
+    card.querySelector(".btn-dislike").addEventListener("click", (e) => {
+      e.stopPropagation();
+      const result = toggleReaction(imgUrl, "dislike");
+      card.querySelector(".btn-dislike").classList.toggle("active", result === "dislike");
+      card.querySelector(".btn-like").classList.remove("active");
     });
 
     container.appendChild(card);
@@ -204,6 +226,46 @@ function renderBreedInfoBanner(breedInfo, breedPath) {
   main.insertBefore(banner, main.firstChild);
 }
 
+function renderRecentlyViewed() {
+  if (recentlyViewed.length === 0) return;
+  const old = document.getElementById("recently-viewed-section");
+  if (old) old.remove();
+
+  const section = document.createElement("section");
+  section.id = "recently-viewed-section";
+  section.className = "recently-viewed-section";
+  section.innerHTML = `
+    <h2 class="section-label">Recently Viewed</h2>
+    <div class="recent-scroll" id="recent-scroll"></div>
+  `;
+
+  const main = document.querySelector(".main-content");
+  const resultsHeader = document.querySelector(".results-header");
+  main.insertBefore(section, resultsHeader);
+
+  const scroll = document.getElementById("recent-scroll");
+  recentlyViewed.forEach(({ breed, imgUrl }) => {
+    const chip = document.createElement("a");
+    chip.href = `profile.html?breed=${encodeURIComponent(breed)}&img=${encodeURIComponent(imgUrl || "")}`;
+    chip.className = "recent-chip";
+    chip.innerHTML = `
+      <img src="${imgUrl || ""}" alt="${formatBreedName(breed)}" class="recent-chip-img"
+        onerror="this.src='https://placehold.co/64x64/E8DFD0/7C5C3E?text=🐾'" />
+      <span class="recent-chip-name">${formatBreedName(breed)}</span>
+    `;
+    scroll.appendChild(chip);
+  });
+  console.log(`✅ Recently viewed rendered (${recentlyViewed.length} items)`);
+}
+
+function saveRecentlyViewed(breed, imgUrl) {
+  recentlyViewed = recentlyViewed.filter(r => r.breed !== breed);
+  recentlyViewed.unshift({ breed, imgUrl: imgUrl || "", viewedAt: Date.now() });
+  recentlyViewed = recentlyViewed.slice(0, 5);
+  localStorage.setItem("paws_recently_viewed", JSON.stringify(recentlyViewed));
+  console.log("📝 Recently viewed saved:", breed);
+}
+
 // ═══════════════════════════════════════════════════════
 // PAGE: PROFILE
 // ═══════════════════════════════════════════════════════
@@ -220,6 +282,7 @@ async function initProfilePage() {
   }
 
   console.log(`📋 Profile — breed: "${breed}", img: "${mainImg}"`);
+  saveRecentlyViewed(breed, mainImg);
 
   const mainPhotoEl      = document.getElementById("main-photo");
   const photoPlaceholder = document.getElementById("photo-placeholder");
@@ -357,7 +420,10 @@ function initFavoritesPage() {
     return;
   }
 
-  favorites.forEach(({ imgUrl, breed }) => {
+  favorites.forEach(({ imgUrl, breed, savedAt }) => {
+    const savedDate = savedAt
+      ? new Date(savedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
+      : "";
     const card = document.createElement("div");
     card.className = "dog-card";
     card.innerHTML = `
@@ -368,7 +434,7 @@ function initFavoritesPage() {
       </div>
       <div class="card-body">
         <p class="card-dog-name">${formatBreedName(breed)}</p>
-        <p class="card-dog-meta">Saved to favorites</p>
+        <p class="card-dog-meta">${savedDate ? `Saved · ${savedDate}` : "Saved to favorites"}</p>
       </div>
       <div class="card-footer">
         <span>🐾 Saved</span>
@@ -393,12 +459,12 @@ function initFavoritesPage() {
 }
 
 // ═══════════════════════════════════════════════════════
-// FAVORITES — localStorage (swap for Firebase later)
+// FAVORITES & REACTIONS — localStorage
 // ═══════════════════════════════════════════════════════
 function toggleFavorite(dog) {
   const idx = favorites.findIndex(f => f.imgUrl === dog.imgUrl);
   if (idx === -1) {
-    favorites.push(dog);
+    favorites.push({ ...dog, savedAt: Date.now() });
     console.log("💾 Added to favorites:", dog.breed);
   } else {
     favorites.splice(idx, 1);
@@ -406,6 +472,14 @@ function toggleFavorite(dog) {
   }
   localStorage.setItem("paws_favorites", JSON.stringify(favorites));
   updateFavCount();
+}
+
+function toggleReaction(imgUrl, type) {
+  const current = reactions[imgUrl];
+  reactions[imgUrl] = current === type ? null : type;
+  localStorage.setItem("paws_reactions", JSON.stringify(reactions));
+  console.log(`${type === "like" ? "👍" : "👎"} Reaction for ${imgUrl}: ${reactions[imgUrl] || "cleared"}`);
+  return reactions[imgUrl];
 }
 
 function updateFavCount() {
