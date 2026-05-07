@@ -24,10 +24,13 @@
     <h1 class="hero-title">Find your <em>perfect</em> companion.</h1>
     <p class="hero-sub">Thousands of dogs are waiting for a home near you.</p>
 
-    <!-- SEARCH BAR — data from GET /v2/animals -->
+    <!-- SEARCH BAR — breed text search with autocomplete -->
     <div class="search-bar" id="search-form">
-      <input type="text" id="zip-input" placeholder="Enter your zip code..." maxlength="10" />
-      <button class="btn-search" id="search-btn">Search Dogs</button>
+      <div class="search-input-wrap">
+        <input type="text" id="breed-search-input" placeholder="Search by breed (e.g. golden retriever)..." autocomplete="off" />
+        <div class="breed-suggestions" id="breed-suggestions"></div>
+      </div>
+      <button class="btn-search" id="search-btn">Search</button>
     </div>
   </header>
 
@@ -144,6 +147,7 @@
     <p class="footer-sub">Paws &amp; Found · Built with ♡</p>
   </footer>
 
+  <div id="toast-container" class="toast-container"></div>
   <script src="app.js"></script>
 </body>
 </html>

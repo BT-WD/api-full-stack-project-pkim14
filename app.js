@@ -6,7 +6,6 @@
    ===================================================== */
 
 // ── CONFIG ────────────────────────────────────────────
-// Sign up free at https://api-ninjas.com to get your key
 const API_NINJAS_KEY = "YOUR_API_NINJAS_KEY_HERE";
 
 const DOGCEO_BASE = "https://dog.ceo/api";
@@ -20,11 +19,9 @@ let allBreeds = {};
 
 // ── INIT ──────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
-  console.log("🐾 Paws & Found — app.js loaded");
   updateFavCount();
 
   const page = document.body.dataset.page;
-  console.log(`📄 Current page: ${page}`);
 
   if (page === "index")     initSearchPage();
   if (page === "profile")   initProfilePage();
@@ -35,23 +32,19 @@ document.addEventListener("DOMContentLoaded", () => {
 // PAGE: SEARCH / INDEX
 // ═══════════════════════════════════════════════════════
 async function initSearchPage() {
-  console.log("🔍 Initializing search page...");
   renderRecentlyViewed();
   await loadBreedDropdown();
+  setupBreedSearch();
   document.getElementById("search-btn").addEventListener("click", handleSearch);
   document.getElementById("apply-filters-btn").addEventListener("click", handleSearch);
-  handleSearch(); // default load
+  handleSearch();
 }
 
 async function loadBreedDropdown() {
-  console.log("📡 Fetching breed list from dog.ceo...");
   const select = document.getElementById("breed-filter");
   try {
-    const res  = await fetch(`${DOGCEO_BASE}/breeds/list/all`);
-    if (!res.ok) throw new Error(`dog.ceo breeds responded with status ${res.status}`);
-    const data = await res.json();
+    const data = await fetchWithRetry(`${DOGCEO_BASE}/breeds/list/all`);
     allBreeds  = data.message;
-    console.log(`✅ Loaded ${Object.keys(allBreeds).length} breeds`, allBreeds);
 
     Object.keys(allBreeds).sort().forEach(breed => {
       const subs = allBreeds[breed];
@@ -70,15 +63,87 @@ async function loadBreedDropdown() {
       }
     });
   } catch (err) {
-    console.error("❌ Failed to load breed list:", err.message);
     showError("data-container", "Could not load breeds. Check your connection and try again.");
   }
+}
+
+// ── Breed autocomplete search ──────────────────────────
+function setupBreedSearch() {
+  const input       = document.getElementById("breed-search-input");
+  const suggestBox  = document.getElementById("breed-suggestions");
+
+  input.addEventListener("input", () => {
+    const q = input.value.trim().toLowerCase();
+    if (!q) { hideSuggestions(); return; }
+
+    const matches = getAllBreedPaths().filter(path =>
+      formatBreedName(path).toLowerCase().includes(q)
+    ).slice(0, 7);
+
+    if (matches.length === 0) { hideSuggestions(); return; }
+
+    suggestBox.innerHTML = matches.map(path => `
+      <div class="suggestion-item" data-path="${path}">${formatBreedName(path)}</div>
+    `).join("");
+    suggestBox.classList.add("open");
+
+    suggestBox.querySelectorAll(".suggestion-item").forEach(item => {
+      item.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        selectBreed(item.dataset.path, input);
+      });
+    });
+  });
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const q = input.value.trim().toLowerCase();
+      if (q) {
+        const match = getAllBreedPaths().find(p =>
+          formatBreedName(p).toLowerCase().includes(q)
+        );
+        if (match) selectBreed(match, input);
+      }
+      hideSuggestions();
+      handleSearch();
+    }
+    if (e.key === "Escape") hideSuggestions();
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".search-input-wrap")) hideSuggestions();
+  });
+}
+
+function selectBreed(breedPath, input) {
+  document.getElementById("breed-filter").value = breedPath;
+  input.value = formatBreedName(breedPath);
+  hideSuggestions();
+  handleSearch();
+}
+
+function hideSuggestions() {
+  const box = document.getElementById("breed-suggestions");
+  if (box) { box.innerHTML = ""; box.classList.remove("open"); }
+}
+
+function getAllBreedPaths() {
+  const paths = [];
+  Object.keys(allBreeds).sort().forEach(breed => {
+    const subs = allBreeds[breed];
+    if (subs.length === 0) {
+      paths.push(breed);
+    } else {
+      subs.forEach(sub => paths.push(`${breed}/${sub}`));
+    }
+  });
+  return paths;
 }
 
 async function handleSearch() {
   const breedValue = document.getElementById("breed-filter").value;
   const breedPath  = breedValue || getRandomBreed();
-  console.log("🔎 Search triggered — breed path:", breedPath);
 
   setLoadingState("data-container", 9);
 
@@ -88,9 +153,6 @@ async function handleSearch() {
       fetchBreedInfo(breedPath.split("/")[0])
     ]);
 
-    console.log(`📸 Got ${photos.length} photos`);
-    console.log("ℹ️ Breed info from api-ninjas:", breedInfo);
-
     renderBreedInfoBanner(breedInfo, breedPath);
     renderDogCards(photos, breedPath, breedInfo);
 
@@ -98,33 +160,25 @@ async function handleSearch() {
       `Showing ${photos.length} ${formatBreedName(breedPath)} dogs`;
 
   } catch (err) {
-    console.error("❌ Search failed:", err.message);
     showError("data-container", "Something went wrong fetching dogs. Please try again!");
   }
 }
 
 async function fetchBreedPhotos(breedPath, count = 9) {
-  const url = `${DOGCEO_BASE}/breed/${breedPath}/images/random/${count}`;
-  console.log(`📡 GET ${url}`);
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`dog.ceo photos responded with status ${res.status}`);
-  const data = await res.json();
+  const data = await fetchWithRetry(`${DOGCEO_BASE}/breed/${breedPath}/images/random/${count}`);
   if (data.status !== "success") throw new Error("dog.ceo returned non-success status");
   return data.message;
 }
 
 async function fetchBreedInfo(breed) {
   const query = breed.replace(/-/g, " ");
-  const url   = `${NINJAS_BASE}?name=${encodeURIComponent(query)}`;
-  console.log(`📡 GET ${url}`);
   try {
-    const res = await fetch(url, { headers: { "X-Api-Key": API_NINJAS_KEY } });
-    if (!res.ok) throw new Error(`api-ninjas responded with status ${res.status}`);
-    const data = await res.json();
-    console.log("✅ api-ninjas raw response:", data);
+    const data = await fetchWithRetry(
+      `${NINJAS_BASE}?name=${encodeURIComponent(query)}`,
+      { headers: { "X-Api-Key": API_NINJAS_KEY } }
+    );
     return data[0] || null;
   } catch (err) {
-    console.warn("⚠️ Could not fetch breed info (api-ninjas) — continuing without it:", err.message);
     return null;
   }
 }
@@ -139,10 +193,11 @@ function renderDogCards(photos, breedPath, breedInfo) {
   }
 
   photos.forEach((imgUrl, i) => {
-    const isSaved   = favorites.some(f => f.imgUrl === imgUrl);
-    const reaction  = reactions[imgUrl] || null;
-    const card      = document.createElement("div");
-    card.className  = "dog-card";
+    const isSaved  = favorites.some(f => f.imgUrl === imgUrl);
+    const reaction = reactions[imgUrl] || null;
+    const card     = document.createElement("div");
+    card.className = "dog-card";
+    card.style.animationDelay = `${i * 60}ms`;
 
     card.innerHTML = `
       <div class="card-img-wrap">
@@ -152,8 +207,7 @@ function renderDogCards(photos, breedPath, breedInfo) {
           loading="lazy"
           onerror="this.src='https://placehold.co/400x300/E8DFD0/7C5C3E?text=No+photo'"
         />
-        <button class="card-heart ${isSaved ? "saved" : ""}" data-img="${imgUrl}" data-breed="${breedPath}"
-          title="${isSaved ? "Remove from favorites" : "Save to favorites"}">${isSaved ? "♥" : "♡"}</button>
+        <button class="card-heart ${isSaved ? "saved" : ""}" title="${isSaved ? "Remove from favorites" : "Save to favorites"}">${isSaved ? "♥" : "♡"}</button>
       </div>
       <div class="card-body">
         <p class="card-dog-name">${formatBreedName(breedPath)}</p>
@@ -177,7 +231,7 @@ function renderDogCards(photos, breedPath, breedInfo) {
       const nowSaved = favorites.some(f => f.imgUrl === imgUrl);
       e.currentTarget.textContent = nowSaved ? "♥" : "♡";
       e.currentTarget.classList.toggle("saved", nowSaved);
-      console.log(`${nowSaved ? "💾 Saved" : "🗑️ Removed"} favorite:`, imgUrl);
+      showToast(nowSaved ? "Saved to favorites ♥" : "Removed from favorites", nowSaved ? "success" : "info");
     });
 
     card.querySelector(".btn-like").addEventListener("click", (e) => {
@@ -196,8 +250,6 @@ function renderDogCards(photos, breedPath, breedInfo) {
 
     container.appendChild(card);
   });
-
-  console.log(`✅ Rendered ${photos.length} dog cards`);
 }
 
 function renderBreedInfoBanner(breedInfo, breedPath) {
@@ -255,7 +307,6 @@ function renderRecentlyViewed() {
     `;
     scroll.appendChild(chip);
   });
-  console.log(`✅ Recently viewed rendered (${recentlyViewed.length} items)`);
 }
 
 function saveRecentlyViewed(breed, imgUrl) {
@@ -263,25 +314,21 @@ function saveRecentlyViewed(breed, imgUrl) {
   recentlyViewed.unshift({ breed, imgUrl: imgUrl || "", viewedAt: Date.now() });
   recentlyViewed = recentlyViewed.slice(0, 5);
   localStorage.setItem("paws_recently_viewed", JSON.stringify(recentlyViewed));
-  console.log("📝 Recently viewed saved:", breed);
 }
 
 // ═══════════════════════════════════════════════════════
 // PAGE: PROFILE
 // ═══════════════════════════════════════════════════════
 async function initProfilePage() {
-  console.log("🐶 Initializing profile page...");
   const params  = new URLSearchParams(window.location.search);
   const breed   = params.get("breed");
   const mainImg = params.get("img");
 
   if (!breed) {
-    console.error("❌ No breed param found in URL");
     showError("profile-container", "No dog selected. Go back and choose one!");
     return;
   }
 
-  console.log(`📋 Profile — breed: "${breed}", img: "${mainImg}"`);
   saveRecentlyViewed(breed, mainImg);
 
   const mainPhotoEl      = document.getElementById("main-photo");
@@ -301,15 +348,12 @@ async function initProfilePage() {
       fetchBreedPhotos(breed, 6),
       fetchBreedInfo(breed.split("/")[0])
     ]);
-    console.log(`📸 Got ${photos.length} gallery photos`);
     renderProfileGallery(photos, mainImg, breed);
     renderProfileDetails(breedInfo, breed);
   } catch (err) {
-    console.error("❌ Profile load error:", err.message);
     document.getElementById("dog-meta").textContent = "Could not load all details.";
   }
 
-  // Favorite button
   const favBtn  = document.getElementById("favorite-btn");
   const isSaved = favorites.some(f => f.breed === breed && f.imgUrl === mainImg);
   favBtn.textContent = isSaved ? "♥ Saved!" : "♡ Save to Favorites";
@@ -320,7 +364,7 @@ async function initProfilePage() {
     const nowSaved = favorites.some(f => f.breed === breed && f.imgUrl === mainImg);
     favBtn.textContent = nowSaved ? "♥ Saved!" : "♡ Save to Favorites";
     favBtn.classList.toggle("saved", nowSaved);
-    console.log(`${nowSaved ? "💾 Saved" : "🗑️ Removed"} profile favorite:`, breed);
+    showToast(nowSaved ? "Saved to favorites ♥" : "Removed from favorites", nowSaved ? "success" : "info");
   });
 }
 
@@ -345,13 +389,10 @@ function renderProfileGallery(photos, mainImg, breed) {
       mainPhotoEl.src = url;
       document.querySelectorAll(".thumb-img").forEach(t => t.classList.remove("active"));
       thumb.classList.add("active");
-      console.log(`🖼️ Switched main photo to: ${url}`);
     });
 
     thumbsContainer.appendChild(thumb);
   });
-
-  console.log(`✅ Gallery rendered — ${allPhotos.length} photos`);
 }
 
 function renderProfileDetails(breedInfo, breed) {
@@ -361,7 +402,6 @@ function renderProfileDetails(breedInfo, breed) {
     metaEl.textContent = `${formatBreedName(breed)} · Available for adoption`;
     document.getElementById("dog-description").textContent =
       "Contact your local shelter for more information about this dog.";
-    console.warn("⚠️ No breed info available — showing fallback text");
     return;
   }
 
@@ -374,12 +414,12 @@ function renderProfileDetails(breedInfo, breed) {
     `They tend to be ${barkLabel(breedInfo.barking).toLowerCase()} and love spending time with their family.`;
 
   const traits = [];
-  if (breedInfo.good_with_children)  traits.push("Good with Kids");
+  if (breedInfo.good_with_children)   traits.push("Good with Kids");
   if (breedInfo.good_with_other_dogs) traits.push("Dog-Friendly");
-  if (breedInfo.shedding   <= 2)     traits.push("Low Shedding");
-  if (breedInfo.energy     >= 4)     traits.push("High Energy");
-  if (breedInfo.trainability >= 4)   traits.push("Easy to Train");
-  if (breedInfo.playfulness  >= 4)   traits.push("Very Playful");
+  if (breedInfo.shedding    <= 2)     traits.push("Low Shedding");
+  if (breedInfo.energy      >= 4)     traits.push("High Energy");
+  if (breedInfo.trainability >= 4)    traits.push("Easy to Train");
+  if (breedInfo.playfulness  >= 4)    traits.push("Very Playful");
 
   const traitsEl = document.getElementById("traits-container");
   traitsEl.innerHTML = "";
@@ -395,17 +435,12 @@ function renderProfileDetails(breedInfo, breed) {
   document.getElementById("shelter-name").textContent  = "Local Animal Shelter";
   document.getElementById("shelter-phone").textContent = "📞 Contact your local shelter to inquire";
   document.getElementById("shelter-email").textContent = "🔗 Find on Petfinder.com";
-
-  console.log("✅ Profile details rendered:", formatBreedName(breed));
 }
 
 // ═══════════════════════════════════════════════════════
 // PAGE: FAVORITES
 // ═══════════════════════════════════════════════════════
 function initFavoritesPage() {
-  console.log("❤️ Initializing favorites page...");
-  console.log(`📦 ${favorites.length} saved favorites in localStorage:`, favorites);
-
   const container  = document.getElementById("favorites-container");
   const emptyState = document.getElementById("favorites-empty");
   const authWall   = document.getElementById("auth-wall");
@@ -416,16 +451,16 @@ function initFavoritesPage() {
   if (favorites.length === 0) {
     emptyState.style.display = "block";
     container.style.display  = "none";
-    console.log("ℹ️ No favorites to display");
     return;
   }
 
-  favorites.forEach(({ imgUrl, breed, savedAt }) => {
+  favorites.forEach(({ imgUrl, breed, savedAt }, i) => {
     const savedDate = savedAt
       ? new Date(savedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
       : "";
     const card = document.createElement("div");
     card.className = "dog-card";
+    card.style.animationDelay = `${i * 60}ms`;
     card.innerHTML = `
       <div class="card-img-wrap">
         <img src="${imgUrl}" alt="${formatBreedName(breed)}" loading="lazy"
@@ -444,18 +479,19 @@ function initFavoritesPage() {
 
     card.querySelector(".card-heart").addEventListener("click", () => {
       toggleFavorite({ imgUrl, breed });
-      card.remove();
-      console.log("🗑️ Removed from favorites:", breed);
-      if (favorites.length === 0) {
-        emptyState.style.display = "block";
-        container.style.display  = "none";
-      }
+      card.classList.add("card-removing");
+      setTimeout(() => {
+        card.remove();
+        if (favorites.length === 0) {
+          emptyState.style.display = "block";
+          container.style.display  = "none";
+        }
+      }, 280);
+      showToast("Removed from favorites", "info");
     });
 
     container.appendChild(card);
   });
-
-  console.log(`✅ Rendered ${favorites.length} favorite cards`);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -465,10 +501,8 @@ function toggleFavorite(dog) {
   const idx = favorites.findIndex(f => f.imgUrl === dog.imgUrl);
   if (idx === -1) {
     favorites.push({ ...dog, savedAt: Date.now() });
-    console.log("💾 Added to favorites:", dog.breed);
   } else {
     favorites.splice(idx, 1);
-    console.log("🗑️ Removed from favorites:", dog.breed);
   }
   localStorage.setItem("paws_favorites", JSON.stringify(favorites));
   updateFavCount();
@@ -478,7 +512,6 @@ function toggleReaction(imgUrl, type) {
   const current = reactions[imgUrl];
   reactions[imgUrl] = current === type ? null : type;
   localStorage.setItem("paws_reactions", JSON.stringify(reactions));
-  console.log(`${type === "like" ? "👍" : "👎"} Reaction for ${imgUrl}: ${reactions[imgUrl] || "cleared"}`);
   return reactions[imgUrl];
 }
 
@@ -490,8 +523,41 @@ function updateFavCount() {
 }
 
 // ═══════════════════════════════════════════════════════
-// HELPERS
+// TOAST NOTIFICATIONS
 // ═══════════════════════════════════════════════════════
+function showToast(message, type = "success") {
+  const container = document.getElementById("toast-container");
+  if (!container) return;
+
+  const toast = document.createElement("div");
+  toast.className = `toast toast-${type}`;
+  toast.textContent = message;
+  container.appendChild(toast);
+
+  requestAnimationFrame(() => toast.classList.add("toast-visible"));
+
+  setTimeout(() => {
+    toast.classList.remove("toast-visible");
+    toast.addEventListener("transitionend", () => toast.remove(), { once: true });
+  }, 2400);
+}
+
+// ═══════════════════════════════════════════════════════
+// API HELPERS
+// ═══════════════════════════════════════════════════════
+async function fetchWithRetry(url, options = {}, retries = 2) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, options);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch (err) {
+      if (attempt === retries) throw err;
+      await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+    }
+  }
+}
+
 function setLoadingState(containerId, count = 6) {
   const el = document.getElementById(containerId);
   el.innerHTML = "";
@@ -505,7 +571,6 @@ function setLoadingState(containerId, count = 6) {
         </div>
       </div>`;
   }
-  console.log(`⏳ Skeleton loading shown (${count} placeholders)`);
 }
 
 function showError(containerId, message) {
@@ -516,9 +581,11 @@ function showError(containerId, message) {
       <p>${message}</p>
       <button class="btn-primary" onclick="location.reload()">Try Again</button>
     </div>`;
-  console.error(`🚨 Error shown to user: "${message}"`);
 }
 
+// ═══════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════
 function capitalize(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
